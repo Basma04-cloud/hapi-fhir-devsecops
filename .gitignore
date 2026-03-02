@@ -169,3 +169,6 @@ Temporary Items
 # Helm Chart dependencies
 **/charts/*.tgz
 .claude
+
+.env
+reports/

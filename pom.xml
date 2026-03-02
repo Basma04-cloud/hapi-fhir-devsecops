@@ -178,9 +178,9 @@
         </dependency>
         <!-- This dependency includes the CDS Hooks Server -->
         <dependency>
-          <groupId>ca.uhn.hapi.fhir</groupId>
-          <artifactId>hapi-fhir-server-cds-hooks</artifactId>
-          <version>${project.parent.version}</version>
+            <groupId>ca.uhn.hapi.fhir</groupId>
+            <artifactId>hapi-fhir-server-cds-hooks</artifactId>
+            <version>${project.parent.version}</version>
         </dependency>
 
         <dependency>
@@ -492,6 +492,23 @@
         <finalName>ROOT</finalName>
 
         <plugins>
+            <plugin>
+                    <groupId>org.owasp</groupId>
+                    <artifactId>dependency-check-maven</artifactId>
+                    <version>9.0.9</version>
+                    <configuration>
+                        <nvdApiKey>${env.NVD_API_KEY}</nvdApiKey>
+                        <nvdApiDelay>6000</nvdApiDelay>
+                        <nvdMaxRetryCount>10</nvdMaxRetryCount>
+                        <failBuildOnCVSS>9</failBuildOnCVSS>
+                        <autoUpdate>true</autoUpdate>
+                        <outputDirectory>reports</outputDirectory>
+                        <formats>
+                        <format>HTML</format>
+                        <format>JSON</format>
+                        </formats>
+                    </configuration>
+                    </plugin>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>

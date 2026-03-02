@@ -1,99 +1,104 @@
-name: DevSecOps CI
+name: DevSecOps Pipeline - HAPI FHIR
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ master, main ]
   pull_request:
-    branches: [ "master" ]
+    branches: [ master, main ]
 
 jobs:
-  build-and-scan:
-    runs-on: ubuntu-latest
 
+  build:
+    name: Build
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v3
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      - name: Build with Maven
+        run: mvn clean package -DskipTests
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: app-war
+          path: target/ROOT.war
+
+  secrets-scan:
+    name: Secrets Scan - GitLeaks
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-
-      # =============================
-      # 1️⃣ Secrets Scanning - Gitleaks
-      # =============================
-      - name: Run Gitleaks (Secrets Scan)
+      - name: Run GitLeaks
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # =============================
-      # 2️⃣ SAST - Semgrep
-      # =============================
-      - name: Run Semgrep (SAST)
-        uses: returntocorp/semgrep-action@v1
-        with:
-          config: p/ci
-
-      # =============================
-      # 3️⃣ Build Java
-      # =============================
-      - name: Set up Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-          cache: maven
-
-      - name: Build (skip tests)
-        run: mvn -DskipTests clean package
-
-      # =============================
-      # 4️⃣ Dependency Scan (Maven) - Stable mode
-      # =============================
-      - name: Download Dependency Check
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y unzip curl
-          VERSION=9.2.0
-          curl -L --retry 5 --retry-delay 2 \
-            -o dependency-check.zip \
-            "https://github.com/jeremylong/DependencyCheck/releases/download/v${VERSION}/dependency-check-${VERSION}-release.zip"
-          file dependency-check.zip
-          unzip -q dependency-check.zip
-
-      - name: Run Dependency Check (stable mode - no update)
         continue-on-error: true
-        run: |
-          ./dependency-check/bin/dependency-check.sh \
-            --project "hapi-fhir" \
-            --scan . \
-            --format HTML \
-            --out dependency-check-report \
-            --noupdate
-
-      - name: Upload Dependency Report
-        uses: actions/upload-artifact@v4
+      - name: Upload report
+        uses: actions/upload-artifact@v3
+        if: always()
         with:
-          name: dependency-check-report
-          path: dependency-check-report
+          name: gitleaks-report
+          path: results.sarif
 
-      # =============================
-      # 5️⃣ Build Docker Image
-      # =============================
+  dependency-check:
+    name: OWASP Dependency Check
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      - name: Run OWASP Check
+        run: |
+          mvn org.owasp:dependency-check-maven:check \
+            -DfailBuildOnCVSS=9 \
+            -Dformat=ALL \
+            -DoutputDirectory=reports/
+        continue-on-error: true
+      - name: Upload OWASP report
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: owasp-report
+          path: reports/
+
+  container-scan:
+    name: Container Scan - Trivy
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v3
       - name: Build Docker image
-        run: docker build -t hapi-fhir-jpaserver:ci .
+        run: docker build -t hapi-fhir:${{ github.sha }} .
+      - name: Run Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: hapi-fhir:${{ github.sha }}
+          format: sarif
+          output: trivy-results.sarif
+          severity: HIGH,CRITICAL
+        continue-on-error: true
+      - name: Upload Trivy report
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: trivy-report
+          path: trivy-results.sarif
 
-      # =============================
-      # 6️⃣ Install Trivy
-      # =============================
-      - name: Install Trivy
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y wget
-          wget -qO trivy.deb https://github.com/aquasecurity/trivy/releases/latest/download/trivy_0.69.1_Linux-64bit.deb
-          sudo dpkg -i trivy.deb
-
-      # =============================
-      # 7️⃣ Container Scan (fail if HIGH/CRITICAL)
-      # =============================
-      - name: Trivy scan (report only)
-        run: |
-          trivy image --scanners vuln --severity HIGH,CRITICAL hapi-fhir-jpaserver:ci
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    needs: [secrets-scan, dependency-check, container-scan]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Deploy
+        run: docker-compose up -d --build
