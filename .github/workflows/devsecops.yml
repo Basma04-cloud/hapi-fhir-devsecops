@@ -120,14 +120,23 @@ jobs:
             hapi-fhir:latest
 
       - name: Wait for app to start
-        run: sleep 30
-
-      - name: Health check
         run: |
-          curl -f http://localhost:8080/fhir/metadata || exit 1
-          echo "✅ Application HAPI FHIR est UP et repond !"
+          echo "Attente du demarrage de HAPI FHIR..."
+          sleep 90
+
+      - name: Health check with retry
+        run: |
+          for i in 1 2 3 4 5; do
+            echo "Tentative $i..."
+            curl -f http://localhost:8080/fhir/metadata && echo "✅ App UP !" && exit 0
+            sleep 30
+          done
+          echo "❌ App non disponible apres 5 tentatives"
+          docker logs hapi-fhir
+          exit 1
 
       - name: Show container status
+        if: always()
         run: |
           docker ps
           echo "✅ Deploy reussi sur GitHub Actions !"
