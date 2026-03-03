@@ -94,11 +94,40 @@ jobs:
           name: trivy-report
           path: trivy-results.sarif
 
+  #deploy:
+  #  name: Deploy
+  #  runs-on: ubuntu-latest
+  #  needs: [secrets-scan, dependency-check, container-scan]
+  #  steps:
+  #    - uses: actions/checkout@v4
+  #    - name: Deploy
+  #      run: docker-compose up -d --build
   deploy:
-    name: Deploy
+    name: Deploy - Docker
     runs-on: ubuntu-latest
     needs: [secrets-scan, dependency-check, container-scan]
     steps:
       - uses: actions/checkout@v4
-      - name: Deploy
-        run: docker-compose up -d --build
+
+      - name: Build Docker image
+        run: docker build -t hapi-fhir:latest .
+
+      - name: Run container
+        run: |
+          docker run -d \
+            --name hapi-fhir \
+            -p 8080:8080 \
+            hapi-fhir:latest
+
+      - name: Wait for app to start
+        run: sleep 30
+
+      - name: Health check
+        run: |
+          curl -f http://localhost:8080/fhir/metadata || exit 1
+          echo "✅ Application HAPI FHIR est UP et repond !"
+
+      - name: Show container status
+        run: |
+          docker ps
+          echo "✅ Deploy reussi sur GitHub Actions !"
