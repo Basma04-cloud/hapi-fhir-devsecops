@@ -1,22 +1,35 @@
-version: '3.7'
-
 services:
   fhir:
     container_name: fhir
-    image: "hapiproject/hapi:latest"
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: default
     ports:
       - "8090:8080"
+    environment:
+      spring.datasource.url: "jdbc:postgresql://db:5432/hapi"
+      spring.datasource.username: "${POSTGRES_USER}"
+      spring.datasource.password: "${POSTGRES_PASSWORD}"
+      spring.datasource.driverClassName: "org.postgresql.Driver"
+      spring.jpa.properties.hibernate.dialect: "ca.uhn.fhir.jpa.model.dialect.HapiFhirPostgresDialect"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
   db:
     image: postgres:14
     container_name: hapi-postgres
     restart: always
     environment:
-      POSTGRES_PASSWORD: admin
-      POSTGRES_USER: admin
-      POSTGRES_DB: hapi
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_DB: "${POSTGRES_DB}"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     volumes:
       - hapi-postgres-data:/var/lib/postgresql/data
 

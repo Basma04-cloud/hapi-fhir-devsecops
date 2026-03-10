@@ -22,6 +22,7 @@
         <spring_boot_version>3.5.9</spring_boot_version>
         <postgresql.version>42.7.9</postgresql.version>
         <logback_version>1.5.25</logback_version>
+        <jackson.version>2.21.1</jackson.version>
     </properties>
 
     <!-- one-liner to take you to the cloud with settings form the application.yaml file: -->
@@ -58,8 +59,13 @@
         </repository>
     </repositories>
 
-   <dependencyManagement>
+<dependencyManagement>
   <dependencies>
+    <dependency>
+    <groupId>com.fasterxml.jackson.core</groupId>
+    <artifactId>jackson-core</artifactId>
+    <version>${jackson.version}</version>
+</dependency>
 
     <!-- ton override existant -->
     <dependency>
@@ -67,12 +73,10 @@
       <artifactId>jaxb-runtime</artifactId>
       <version>2.3.8</version>
     </dependency>
-
-    <!-- ✅ Fix CVE: forcer la stack Jakarta Mail complète -->
     <dependency>
-      <groupId>org.eclipse.angus</groupId>
-      <artifactId>jakarta.mail</artifactId>
-      <version>2.0.4</version>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-core</artifactId>
+      <version>${jackson.version}</version>
     </dependency>
 
     <!-- (Optionnel mais OK) aligner aussi ces modules -->
@@ -87,8 +91,20 @@
       <artifactId>smtp</artifactId>
       <version>2.0.4</version>
     </dependency>
+    <!-- Correction CRITICAL : quartz -->
+<dependency>
+    <groupId>org.quartz-scheduler</groupId>
+    <artifactId>quartz</artifactId>
+    <version>2.5.0</version>
+</dependency>
 
-  </dependencies>
+<!-- Correction HIGH : moment.js -->
+<dependency>
+    <groupId>org.webjars.bower</groupId>
+    <artifactId>moment</artifactId>
+    <version>2.29.4</version>
+</dependency>
+</dependencies>
 </dependencyManagement>
 
     <dependencies>
@@ -109,8 +125,8 @@
             <version>${postgresql.version}</version>
         </dependency>
         <dependency>
-          <groupId>com.microsoft.sqlserver</groupId>
-          <artifactId>mssql-jdbc</artifactId>
+            <groupId>com.microsoft.sqlserver</groupId>
+            <artifactId>mssql-jdbc</artifactId>
         </dependency>
 
         <!-- Needed for Email subscriptions -->

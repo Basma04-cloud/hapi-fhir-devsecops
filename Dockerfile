@@ -10,7 +10,6 @@ RUN curl -LSsO https://github.com/open-telemetry/opentelemetry-java-instrumentat
 
 COPY pom.xml .
 COPY server.xml .
-#RUN mvn -ntp dependency:go-offline
 
 COPY src/ /tmp/hapi-fhir-jpaserver-starter/src/
 RUN mvn clean install -DskipTests -Djdk.lang.Process.launchMechanism=vfork
@@ -19,9 +18,7 @@ FROM build-hapi AS build-distroless
 RUN mvn package -DskipTests spring-boot:repackage -Pboot
 RUN mkdir /app && cp /tmp/hapi-fhir-jpaserver-starter/target/ROOT.war /app/main.war
 
-
-########### Use the official Tomcat image as base image for the Tomcat variant
-########### it can be built using eg. `docker build --target tomcat .`
+########### Variante Tomcat (optionnelle)
 FROM docker.io/library/tomcat:10-jre21-temurin-noble AS tomcat
 
 USER root
@@ -38,27 +35,20 @@ COPY --chown=65532:65532 server.xml /usr/local/tomcat/conf/server.xml
 COPY --from=build-hapi --chown=65532:65532 /tmp/hapi-fhir-jpaserver-starter/target/ROOT.war /usr/local/tomcat/webapps/ROOT.war
 COPY --from=build-hapi --chown=65532:65532 /tmp/hapi-fhir-jpaserver-starter/opentelemetry-javaagent.jar /app
 
-# distroless brings focus on security and runs on plain spring boot - this is the default image
-FROM eclipse-temurin:17-jre-jammy AS default
-RUN apt-get update && apt-get upgrade -y && \
-    rm -rf /var/lib/apt/lists/*
+########### Image finale Alpine - moins de vulnerabilites OS
+FROM eclipse-temurin:17-jre-alpine AS default
 
-RUN useradd -m -u 65532 appuser
+# Mise a jour des packages Alpine
+RUN apk update && apk upgrade && rm -rf /var/cache/apk/*
 
-USER appuser
+# Alpine utilise adduser au lieu de useradd
+RUN adduser -D -u 65532 appuser
+
 WORKDIR /app
 
-COPY --from=build-distroless /app /app
-COPY --from=build-hapi /tmp/hapi-fhir-jpaserver-starter/opentelemetry-javaagent.jar /app
+COPY --from=build-distroless --chown=65532:65532 /app /app
+COPY --from=build-hapi --chown=65532:65532 /tmp/hapi-fhir-jpaserver-starter/opentelemetry-javaagent.jar /app
 
-ENTRYPOINT ["java","--class-path","/app/main.war","-Dloader.path=main.war!/WEB-INF/classes/,main.war!/WEB-INF/,/app/extra-classes","org.springframework.boot.loader.PropertiesLauncher"]
-# 65532 is the nonroot user's uid
-# used here instead of the name to allow Kubernetes to easily detect that the container
-# is running as a non-root (uid != 0) user.
 USER 65532:65532
-WORKDIR /app
-
-COPY --chown=nonroot:nonroot --from=build-distroless /app /app
-COPY --chown=nonroot:nonroot --from=build-hapi /tmp/hapi-fhir-jpaserver-starter/opentelemetry-javaagent.jar /app
 
 ENTRYPOINT ["java", "--class-path", "/app/main.war", "-Dloader.path=main.war!/WEB-INF/classes/,main.war!/WEB-INF/,/app/extra-classes", "org.springframework.boot.loader.PropertiesLauncher"]
